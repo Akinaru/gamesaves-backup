@@ -235,14 +235,38 @@ static void upload(Item *it) {
     } else {
         it->state = ST_ERROR;
         snprintf(it->msg, sizeof it->msg, "%s", r.error);
-        if (r.status == 401) g_key_invalid = true;
+        if (r.status == 401) {
+            g_key_invalid = true;
+            /* Revoked device key: the next launch pairs again. */
+            if (g_cfg.key_from_file) config_forget_key();
+        }
     }
 }
 
-static bool choose_user(void) {
-    if (R_FAILED(accountGetPreselectedUser(&g_uid)) || !accountUidIsValid(&g_uid)) {
-        PselUserSelectionSettings settings = {0};
-        if (R_FAILED(pselShowUserSelector(&g_uid, &settings)) || !accountUidIsValid(&g_uid)) return false;
+/*
+ * Picks the Switch profile whose saves are backed up: the preselected user,
+ * else the only user, else the system selector, else the last opened user.
+ */
+static bool choose_user(char *err, size_t err_size) {
+    AccountUid users[ACC_USER_LIST_SIZE];
+    s32 user_count = 0;
+    Result rc = accountGetPreselectedUser(&g_uid);
+    if (R_FAILED(rc) || !accountUidIsValid(&g_uid)) {
+        rc = accountListAllUsers(users, ACC_USER_LIST_SIZE, &user_count);
+        if (R_SUCCEEDED(rc) && user_count == 1) {
+            g_uid = users[0];
+        } else {
+            PselUserSelectionSettings settings = {0};
+            rc = pselShowUserSelector(&g_uid, &settings);
+            if (R_SUCCEEDED(rc) && !accountUidIsValid(&g_uid)) {
+                snprintf(err, err_size, "aucun profil choisi (selection annulee)");
+                return false;
+            }
+            if (R_FAILED(rc) && (R_FAILED(accountGetLastOpenedUser(&g_uid)) || !accountUidIsValid(&g_uid))) {
+                snprintf(err, err_size, "aucun profil choisi (selecteur : 0x%X, %d profil(s))", rc, user_count);
+                return false;
+            }
+        }
     }
     AccountProfile profile;
     AccountProfileBase base = {0};
@@ -269,19 +293,93 @@ static void fatal(PadState *pad, const char *fmt, ...) {
     }
 }
 
+static void show_pairing_code(const char *code) {
+    consoleClear();
+    printf("\x1b[36maSaveBackup\x1b[0m  appairage de cette Switch\n");
+    printf("--------------------------------------------------------------------------------\n\n");
+    printf("1. Sur ton telephone ou ton PC, ouvre :\n\n");
+    printf("   \x1b[36m%s/apps/pokemon-saves/pair\x1b[0m\n\n", g_cfg.url);
+    printf("2. Saisis ce code :\n\n");
+    printf("            \x1b[33;1m%s\x1b[0m\n\n", code);
+    printf("Le code est valable 10 minutes. Un nouveau code s'affiche ensuite.\n");
+    printf("\x1b[43;1H+ : annuler");
+    consoleUpdate(NULL);
+}
+
+/*
+ * Pairs the Switch: shows a short code to validate on the website, polls until
+ * the device key arrives, then stores it on the SD card. Returns false if cancelled.
+ */
+static bool pair_device(PadState *pad) {
+    char device[96];
+    snprintf(device, sizeof device, "Switch (%s)", g_nickname);
+    while (true) {
+        char code[16], pairing_id[128];
+        int interval;
+        ApiResult r = api_pair_start(device, code, pairing_id, &interval);
+        if (r.status != 201) {
+            fatal(pad, "appairage : %s", r.error);
+            return false;
+        }
+        show_pairing_code(code);
+
+        u64 next_poll = armGetSystemTick() + armNsToTicks((u64)interval * 1000000000ULL);
+        bool expired = false;
+        while (!expired) {
+            if (!appletMainLoop()) return false;
+            padUpdate(pad);
+            if (padGetButtonsDown(pad) & HidNpadButton_Plus) return false;
+            if (armGetSystemTick() < next_poll) {
+                svcSleepThread(50000000LL);
+                continue;
+            }
+            bool approved;
+            char key[256];
+            r = api_pair_poll(pairing_id, &approved, key);
+            next_poll = armGetSystemTick() + armNsToTicks((u64)interval * 1000000000ULL);
+            if (r.status == 404) {
+                expired = true;
+            } else if (r.status != 200) {
+                status_line("\x1b[31m%s\x1b[0m, nouvel essai...", r.error);
+            } else if (approved) {
+                snprintf(g_cfg.api_key, sizeof g_cfg.api_key, "%s", key);
+                g_cfg.key_from_file = true;
+                api_set_key(key);
+                consoleClear();
+                if (!config_save_key(key)) {
+                    printf("\x1b[33mAttention :\x1b[0m cle non enregistree dans %s.\n", KEY_PATH);
+                    printf("Il faudra appairer de nouveau au prochain lancement.\n\n");
+                }
+                return true;
+            }
+        }
+    }
+}
+
 static void run(PadState *pad) {
     char err[160];
     if (!config_load(&g_cfg, err, sizeof err)) { fatal(pad, "%s", err); return; }
-    if (!api_init(&g_cfg)) { fatal(pad, "initialisation de curl impossible"); return; }
+    if (!api_init(&g_cfg)) { fatal(pad, "initialisation reseau impossible (romfs:/isrg-roots.pem ?)"); return; }
+    Result rc = accountInitialize(AccountServiceType_Application);
+    if (R_FAILED(rc)) rc = accountInitialize(AccountServiceType_System);
+    if (R_FAILED(rc)) { fatal(pad, "service des comptes indisponible (0x%X)", rc); return; }
+    if (!choose_user(err, sizeof err)) { fatal(pad, "%s", err); return; }
+    if (!g_cfg.api_key[0] && !pair_device(pad)) return;
 
     printf("Connexion a %s...\n", g_cfg.url);
     consoleUpdate(NULL);
     ApiResult r = api_get_games(&g_games, &g_game_count);
+    if (r.status == 401 && g_cfg.key_from_file) {
+        /* The device key was revoked on the website: pair again. */
+        config_forget_key();
+        g_cfg.api_key[0] = '\0';
+        if (!pair_device(pad)) return;
+        r = api_get_games(&g_games, &g_game_count);
+    }
+    if (r.status == 401) { fatal(pad, "cle API refusee, verifie api_key dans %s", CONFIG_PATH); return; }
     if (r.status != 200) { fatal(pad, "catalogue : %s", r.error); return; }
     r = api_get_backups(&g_backups, &g_backup_count);
     if (r.status != 200) { fatal(pad, "backups : %s", r.error); return; }
-
-    if (!choose_user()) { fatal(pad, "aucun profil choisi"); return; }
 
     scan_switch();
     scan_nds(g_cfg.nds_dir);
@@ -315,7 +413,7 @@ static void run(PadState *pad) {
             continue;
         }
         render(cursor, top);
-        if (g_key_invalid) status_line("\x1b[31mCle API invalide : verifie %s\x1b[0m", CONFIG_PATH);
+        if (g_key_invalid) status_line("\x1b[31mCle refusee (revoquee ?) : relance l'app pour appairer de nouveau.\x1b[0m");
     }
 }
 
@@ -327,7 +425,6 @@ int main(int argc, char **argv) {
 
     romfsInit();
     socketInitializeDefault();
-    accountInitialize(AccountServiceType_Application);
 
     run(&pad);
 

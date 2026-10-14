@@ -21,14 +21,26 @@ docker run --rm -v "$PWD":/w -w /w devkitpro/devkita64 make
 
 Le résultat est `aSaveBackup.nro`.
 
-## Configuration
+## Appairage
 
-Copie `config.example.ini` vers `sdmc:/config/atools-backup/config.ini` sur la carte SD et remplis `api_key`.
+Pas de clé à recopier. Au premier lancement :
+
+1. La Switch affiche un code de 6 caractères (par exemple `K7M2QX`), valable 10 minutes.
+2. Sur ton téléphone ou ton PC, ouvre `https://atools.akinaru.fr/apps/pokemon-saves/pair` et saisis le code.
+3. La Switch reçoit sa clé et l'enregistre dans `sdmc:/config/atools-backup/device.key`.
+
+Les lancements suivants utilisent cette clé. Si tu la révoques sur le site, l'app relance l'appairage.
+Si le code expire, un nouveau code s'affiche tout seul.
+
+## Configuration (facultative)
+
+Sans fichier, les valeurs par défaut s'appliquent. Pour les changer, copie `config.example.ini` vers
+`sdmc:/config/atools-backup/config.ini`.
 
 | Clé | Défaut | Rôle |
 | --- | --- | --- |
 | `url` | `https://atools.akinaru.fr` | URL du serveur |
-| `api_key` | (obligatoire) | Clé API, jamais affichée à l'écran |
+| `api_key` | (vide) | Clé API fixe, remplace la clé d'appairage |
 | `slot` | `switch` | Nom du slot de backup (`A-Z a-z 0-9 . _ -`, 64 max) |
 | `nds_dir` | `sdmc:/roms/nds` | Dossier scanné (récursif) pour les `.sav` melonDS |
 
@@ -59,21 +71,22 @@ macOS ne lit pas le MTP nativement. Installe un client MTP, par exemple
 | Fichier du projet | Destination sur la SD |
 | --- | --- |
 | `aSaveBackup.nro` | `/switch/aSaveBackup/aSaveBackup.nro` |
-| `config.example.ini` (rempli) | `/config/atools-backup/config.ini` |
+| `config.example.ini` (facultatif) | `/config/atools-backup/config.ini` |
 
-Crée les dossiers s'ils n'existent pas. Attends la fin de la copie, puis quitte DBI avec B ou +.
+Crée le dossier s'il n'existe pas. Attends la fin de la copie, puis quitte DBI avec B ou +.
 
 ### 4. Lancer l'app
 
 1. Ouvre le menu homebrew.
 2. Lance **aSaveBackup**.
 3. Choisis ton profil quand la Switch le demande.
+4. Au premier lancement, valide le code affiché sur le site (voir « Appairage »).
 
 La connexion Wi-Fi doit être active.
 
 ### Mettre à jour
 
-Recompile, puis refais l'étape 3 en écrasant `aSaveBackup.nro`. La config reste en place.
+Recompile, puis refais l'étape 3 en écrasant `aSaveBackup.nro`. La config et la clé restent en place.
 
 ## Commandes
 

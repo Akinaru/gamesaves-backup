@@ -29,9 +29,16 @@ typedef struct {
 
 bool api_init(const Config *cfg);
 void api_exit(void);
+void api_set_key(const char *key);
 
 ApiResult api_get_games(Game **games, size_t *count);
 ApiResult api_get_backups(Backup **backups, size_t *count);
+
+/* POST /pair: starts a pairing. code receives the 6-char code to enter on the website. */
+ApiResult api_pair_start(const char *device, char code[16], char pairing_id[128], int *interval);
+
+/* GET /pair/:id: approved is true once the user validated the code; api_key then holds the device key. */
+ApiResult api_pair_poll(const char *pairing_id, bool *approved, char api_key[256]);
 
 /* PUT /backups/:game/:slot. outcome receives "created", "updated" or "unchanged". */
 ApiResult api_put_backup(const char *game, const char *slot, const char *filename,

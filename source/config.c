@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 static char *trim(char *s) {
     while (isspace((unsigned char)*s)) s++;
@@ -32,12 +33,8 @@ bool config_load(Config *cfg, char *err, size_t err_size) {
     copy(cfg->nds_dir, sizeof cfg->nds_dir, "sdmc:/roms/nds");
 
     FILE *f = fopen(CONFIG_PATH, "r");
-    if (!f) {
-        snprintf(err, err_size, "Config introuvable : %s", CONFIG_PATH);
-        return false;
-    }
     char line[512];
-    while (fgets(line, sizeof line, f)) {
+    while (f && fgets(line, sizeof line, f)) {
         char *s = trim(line);
         if (!*s || *s == '#' || *s == ';' || *s == '[') continue;
         char *eq = strchr(s, '=');
@@ -49,20 +46,35 @@ bool config_load(Config *cfg, char *err, size_t err_size) {
         else if (!strcmp(key, "slot")) copy(cfg->slot, sizeof cfg->slot, value);
         else if (!strcmp(key, "nds_dir")) copy(cfg->nds_dir, sizeof cfg->nds_dir, value);
     }
-    fclose(f);
+    if (f) fclose(f);
+
+    if (!cfg->api_key[0] && (f = fopen(KEY_PATH, "r"))) {
+        if (fgets(line, sizeof line, f)) copy(cfg->api_key, sizeof cfg->api_key, trim(line));
+        fclose(f);
+        cfg->key_from_file = cfg->api_key[0] != '\0';
+    }
 
     size_t n = strlen(cfg->url);
     while (n > 0 && cfg->url[n - 1] == '/') cfg->url[--n] = '\0';
     n = strlen(cfg->nds_dir);
     while (n > 0 && cfg->nds_dir[n - 1] == '/') cfg->nds_dir[--n] = '\0';
 
-    if (!cfg->api_key[0]) {
-        snprintf(err, err_size, "api_key manquante dans %s", CONFIG_PATH);
-        return false;
-    }
     if (!valid_slot(cfg->slot)) {
         snprintf(err, err_size, "slot invalide (lettres, chiffres, . _ - ; 64 max)");
         return false;
     }
     return true;
+}
+
+bool config_save_key(const char *key) {
+    mkdir("sdmc:/config", 0777);
+    mkdir(CONFIG_DIR, 0777);
+    FILE *f = fopen(KEY_PATH, "w");
+    if (!f) return false;
+    bool ok = fprintf(f, "%s\n", key) > 0;
+    return fclose(f) == 0 && ok;
+}
+
+void config_forget_key(void) {
+    remove(KEY_PATH);
 }
