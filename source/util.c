@@ -45,31 +45,6 @@ void sha256_hex(const void *data, size_t len, char out[65]) {
     for (int i = 0; i < SHA256_HASH_SIZE; i++) sprintf(out + i * 2, "%02x", hash[i]);
 }
 
-/* Latin-1 supplement (U+00C0..U+00FF) to ASCII. */
-static const char LATIN1[] =
-    "AAAAAAACEEEEIIII" "DNOOOOOxOUUUUYTs"
-    "aaaaaaaceeeeiiii" "dnooooo/ouuuuyty";
-
-void ascii_fold(const char *in, char *out, size_t out_size) {
-    size_t o = 0;
-    const unsigned char *s = (const unsigned char *)in;
-    while (*s && o + 1 < out_size) {
-        if (*s < 0x80) {
-            out[o++] = *s++;
-        } else if (*s == 0xC3 && s[1] >= 0x80 && s[1] <= 0xBF) {
-            unsigned cp = 0xC0 + (s[1] - 0x80);
-            out[o++] = LATIN1[cp - 0xC0];
-            s += 2;
-        } else {
-            /* Other multi-byte sequence: skip it. */
-            s++;
-            while ((*s & 0xC0) == 0x80) s++;
-            out[o++] = '?';
-        }
-    }
-    out[o] = '\0';
-}
-
 bool ends_with_ci(const char *s, const char *suffix) {
     size_t a = strlen(s), b = strlen(suffix);
     return a >= b && strcasecmp(s + a - b, suffix) == 0;

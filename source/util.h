@@ -20,7 +20,4 @@ bool read_file(const char *path, Buf *b);
 /* Lowercase hex SHA-256 of data (out must hold 65 chars). */
 void sha256_hex(const void *data, size_t len, char out[65]);
 
-/* Copies UTF-8 text into out as plain ASCII (accents dropped), for the console font. */
-void ascii_fold(const char *in, char *out, size_t out_size);
-
 bool ends_with_ci(const char *s, const char *suffix);

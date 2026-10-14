@@ -88,19 +88,33 @@ La connexion Wi-Fi doit être active.
 
 Recompile, puis refais l'étape 3 en écrasant `aSaveBackup.nro`. La config et la clé restent en place.
 
+## Interface
+
+- **Accueil** : à gauche, les saves trouvées avec leur état (`Nouvelle`, `Modifiée`, `À jour`, `Envoyée`,
+  `Erreur`). À droite, le détail de la save sélectionnée tel que le serveur l'a lu au dernier backup :
+  jaquette, date du backup, nombre de versions, dresseur, temps de jeu, argent, badges, lieu et équipe.
+- **Boîtes** : la grille des boîtes du PC, avec la fiche du Pokémon sélectionné (espèce, surnom, niveau,
+  dresseur d'origine, chromatique) et le Pokédex.
+
+Les sprites (PokeAPI) et les jaquettes (serveur atools) sont téléchargés au premier affichage, puis gardés
+dans `sdmc:/config/atools-backup/cache/`.
+
 ## Commandes
 
-| Touche | Action |
-| --- | --- |
-| Haut / Bas | Choisir une save |
-| A | Envoyer la save sélectionnée |
-| X | Envoyer toutes les saves nouvelles ou modifiées |
-| + | Quitter |
-
-États affichés : `NOUVELLE` (absente du serveur), `MODIFIEE` (différente du serveur), `A JOUR`,
-`ENVOYEE`, `ERREUR` (message à droite).
+| Écran | Touche | Action |
+| --- | --- | --- |
+| Accueil | Haut / Bas | Choisir une save |
+| Accueil | A | Envoyer la save sélectionnée |
+| Accueil | X | Envoyer toutes les saves nouvelles ou modifiées |
+| Accueil | Y | Voir les boîtes de la save (version du serveur) |
+| Accueil | + | Quitter |
+| Boîtes | Croix directionnelle | Choisir un Pokémon |
+| Boîtes | L / R | Boîte précédente / suivante |
+| Boîtes | B | Retour |
 
 ## Serveur
 
-Les saves melonDS demandent le champ `ndsGameCodes` dans `GET /games`. Le patch est dans
-`server/atools-nds-game-codes.patch`. Sans lui, les saves DS sont ignorées.
+Les saves melonDS demandent le champ `ndsGameCodes` dans `GET /games`. Sans lui, les saves DS sont ignorées.
+
+Si `GET /games` renvoie aussi `colors` (deux couleurs `#rrggbb` par jeu), l'interface les utilise pour les
+bandeaux des jeux. Sinon, elle prend une couleur par défaut.

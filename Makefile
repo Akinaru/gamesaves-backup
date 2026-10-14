@@ -45,7 +45,7 @@ INCLUDES	:=	include
 ROMFS	:=	romfs
 APP_TITLE	:=	aSaveBackup
 APP_AUTHOR	:=	Maxime
-APP_VERSION	:=	1.0.0
+APP_VERSION	:=	2.0.0
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -62,7 +62,7 @@ CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -ljansson -lz -lnx
+LIBS	:= -lcurl -ljansson `$(PREFIX)pkg-config --libs SDL2_ttf SDL2_image SDL2_gfx` -lz -lnx -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
